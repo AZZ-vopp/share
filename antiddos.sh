@@ -213,9 +213,7 @@ monitor_cpu_and_manage_rules() {
     while true; do
         # Thông báo chào mừng
         echo "============================"
-        echo "   Joey Huang BLOG - jhb.ovh"
         echo "   Chào mừng sử dụng script chống DDoS CC tấn công"
-        echo "   Nhóm TG: https://t.me/+ft-zI76oovgwNmRh"
         echo "============================"
         echo 
 
