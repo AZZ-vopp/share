@@ -1,33 +1,34 @@
 #!/bin/bash
 
-echo "Chào mừng bạn đến với kho lữu trữ dạp của tôi"
-if sudo grep -q "^PermitRootLogin yes$" /etc/ssh/sshd_config; then
-  echo "SSH đăng nhập root đã được bật"
-else
-  echo "SSH đăng nhập root chưa được bật"
-fi
-read -p "Bạn có muốn bật SSH đăng nhập root không? (y/n)" choice
-if [ ${choice} == y ] || [ ${choice} == Y ]; then
-  if grep -qi "centos" /etc/*release; then
-    sudo sed -i 's/#PermitRootLogin yes/PermitRootLogin yes/g' /etc/ssh/sshd_config
-    sudo systemctl restart sshd.service
-  elif grep -qi "ubuntu" /etc/*release; then
-    sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/g' /etc/ssh/sshd_config
-    sudo systemctl restart ssh
-  elif grep -qi "debian" /etc/*release; then
-    sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/g' /etc/ssh/sshd_config
-    sudo systemctl restart ssh
-  else
-    echo "Phân phối Linux không được hỗ trợ"
-  fi
-  sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config
-  sudo systemctl restart sshd.service
-  echo "Vui lòng đặt mật khẩu cho người dùng root:"
-  sudo passwd root
-  sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
-  sudo sed -i 's/PubkeyAuthentication yes/PubkeyAuthentication no/g' /etc/ssh/sshd_config
-  sudo systemctl restart sshd.service
+[[ $(id -u) != 0 ]] && echo -e "\033[31m Phải chạy script với quyền root. Vui lòng nhập sudo -i để chuyển sang quyền root và chạy lại \033[0m" && exit 1
 
+password=$1
+[[ -z $password || $password = '[PASSWORD]' ]] && read -p "Vui lòng nhập mật khẩu root: " password
+
+echo root:$password | chpasswd root
+sed -i 's@^\(Include[ ]*/etc/ssh/sshd_config.d/\*\.conf\)@# \1@' /etc/ssh/sshd_config
+sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/g;s/^#\?PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config
+sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+sed -i 's/#ListenAddress ::/ListenAddress ::/' /etc/ssh/sshd_config
+sed -i 's/#AddressFamily any/AddressFamily any/' /etc/ssh/sshd_config
+sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication no/g' /etc/ssh/sshd_config
+sed -i '/^AuthorizedKeysFile/s/^/#/' /etc/ssh/sshd_config
+sed -i 's/^#[[:space:]]*KbdInteractiveAuthentication.*\|^KbdInteractiveAuthentication.*/KbdInteractiveAuthentication yes/' /etc/ssh/sshd_config
+
+[ -f /etc/selinux/config ] && [ $(type -p getenforce) ] && [ $(getenforce) = 'Enforcing' ] && { setenforce 0; sed -i 's/^SELINUX=.*/# &/; /SELINUX=/a\SELINUX=disabled' /etc/selinux/config; }
+
+if [ -f /etc/os-release ]; then
+  if [ "$(awk -F= '/VERSION_CODENAME/{print $2}' /etc/os-release)" = 'noble' ]; then
+    systemctl restart ssh
+  elif [[ "$(grep 'PRETTY_NAME' /etc/os-release)" =~ 'Alpine' ]]; then
+    service sshd restart
+  else
+    systemctl restart sshd
+  fi
 else
-  echo "Đã hủy việc bật SSH đăng nhập root."
+  systemctl restart ssh >/dev/null 2>&1
+  systemctl restart sshd >/dev/null 2>&1
+  service sshd restart >/dev/null 2>&1
 fi
+
+echo -e "\033[32m Vui lòng đăng nhập lại. Tên người dùng: root, Mật khẩu: $password \033[0m"
